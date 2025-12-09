@@ -63,6 +63,7 @@ export type User = {
   email: string;
   name: string;
   role: 'ADMIN' | 'KASIR' | 'OWNER';
+  password?: string;
 };
 
 export type Staff = {
