@@ -21,6 +21,57 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 type NewOrderItem = { menu_item_id: number; quantity: number; note?: string };
 
+const featureList = [
+  {
+    title: 'Monitoring Aktivitas Restoran',
+    description: 'Dashboard realtime untuk antrian dapur, status meja, dan performa kasir.'
+  },
+  {
+    title: 'Sistem Delivery Order',
+    description: 'Kelola pesanan take away/delivery lengkap dengan kontak pelanggan dan alamat.'
+  },
+  {
+    title: 'Manajemen Pesanan',
+    description: 'Status tiket otomatis dari diterima, dimasak, diantar, hingga pembayaran.'
+  },
+  {
+    title: 'Manajemen Pelanggan',
+    description: 'Catat preferensi, nama pelanggan, dan riwayat transaksi untuk layanan personal.'
+  },
+  {
+    title: 'Manajemen Meja',
+    description: 'Reservasi, kapasitas, dan rotasi meja terpantau jelas untuk crew lantai.'
+  },
+  {
+    title: 'Operator & Shift Pegawai',
+    description: 'Profil kasir, waiter, dan dapur dengan pergantian shift yang terdokumentasi.'
+  },
+  {
+    title: 'Manajemen Pembayaran',
+    description: 'Dukungan pembayaran tunai, kartu, dan QRIS plus pencatatan transaksi harian.'
+  },
+  {
+    title: 'Manajemen Bahan Baku',
+    description: 'Pantau stok bahan baku dan penarikan ke dapur agar waste dapat ditekan.'
+  },
+  {
+    title: 'Manajemen Promo & Diskon',
+    description: 'Kode voucher, happy hour, atau potongan pelanggan tetap yang terintegrasi POS.'
+  },
+  {
+    title: 'Manajemen Pembukuan Restoran',
+    description: 'Ringkasan penjualan, laba kotor, dan settlement kasir siap ekspor ke akuntansi.'
+  },
+  {
+    title: 'Notifikasi Pesanan (Email & WhatsApp)',
+    description: 'Kirimi update status ke pelanggan via API Email/WhatsApp saat pesanan bergerak.'
+  },
+  {
+    title: 'Setting Front End Customer Page',
+    description: 'Halaman menu publik yang bisa dikustom untuk pemesanan mandiri pelanggan.'
+  }
+];
+
 export default function Page() {
   const { data, isLoading, mutate } = useSWR<DashboardData>('/api/dashboard', fetcher, {
     refreshInterval: 12_000
@@ -211,6 +262,27 @@ export default function Page() {
 
   return (
     <main className="grid gap-14">
+      <section className="card">
+        <div className="flex space-between align-center" style={{ marginBottom: 12 }}>
+          <div>
+            <h3>Fitur lengkap untuk resto & kafe</h3>
+            <p className="muted">Daftar kapabilitas yang bisa langsung Anda aktifkan.</p>
+          </div>
+          <span className="tag">Roadmap siap pakai</span>
+        </div>
+        <div className="feature-grid">
+          {featureList.map((feature) => (
+            <div className="feature-card" key={feature.title}>
+              <div className="feature-dot" />
+              <div>
+                <strong>{feature.title}</strong>
+                <p className="small-text">{feature.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="grid grid-cols-3">
         <div className="card">
           <div className="stat">
