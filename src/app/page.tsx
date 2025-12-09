@@ -40,8 +40,10 @@ export default function Page() {
     name: '',
     category: 'Umum',
     price: 0,
-    is_available: true
+    is_available: true,
+    photo_url: ''
   });
+  const [menuPhoto, setMenuPhoto] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const menuLookup = useMemo(() => {
@@ -117,23 +119,55 @@ export default function Page() {
     mutate();
   };
 
+  const uploadMenuPhoto = async () => {
+    if (!menuPhoto) return undefined;
+
+    const formData = new FormData();
+    formData.append('file', menuPhoto);
+    formData.append('filename', menuPhoto.name);
+
+    const upload = await fetch('/api/menu/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!upload.ok) {
+      const err = await upload.json().catch(() => null);
+      throw new Error(err?.error ?? 'Gagal mengunggah foto');
+    }
+
+    const data = (await upload.json()) as { url?: string };
+    return data.url;
+  };
+
   const submitMenu = async () => {
     if (menuForm.name.trim().length < 2) {
       setMessage('Nama menu minimal 2 karakter');
       return;
     }
     setMessage('Menyimpan menu...');
+    let photoUrl = menuForm.photo_url?.trim() || undefined;
+
+    try {
+      const uploadedUrl = await uploadMenuPhoto();
+      photoUrl = uploadedUrl ?? photoUrl;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload foto gagal';
+      setMessage(message);
+      return;
+    }
     const res = await fetch('/api/menu', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(menuForm)
+      body: JSON.stringify({ ...menuForm, photo_url: photoUrl ?? null })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);
       setMessage(err?.error ?? 'Gagal menyimpan menu');
       return;
     }
-    setMenuForm({ name: '', category: 'Umum', price: 0, is_available: true });
+    setMenuForm({ name: '', category: 'Umum', price: 0, is_available: true, photo_url: '' });
+    setMenuPhoto(null);
     setMessage('Menu baru ditambahkan');
     mutate();
   };
@@ -414,6 +448,23 @@ export default function Page() {
                 value={menuForm.price}
                 onChange={(e) => setMenuForm((p) => ({ ...p, price: Number(e.target.value) }))}
                 placeholder="20000"
+              />
+            </label>
+            <label>
+              Foto menu (opsional)
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setMenuPhoto(e.target.files?.[0] ?? null)}
+              />
+              {menuPhoto && <span className="small-text">{menuPhoto.name}</span>}
+            </label>
+            <label>
+              URL foto (jika sudah ada)
+              <input
+                value={menuForm.photo_url}
+                onChange={(e) => setMenuForm((p) => ({ ...p, photo_url: e.target.value }))}
+                placeholder="https://..."
               />
             </label>
             <label className="flex align-center gap-8">

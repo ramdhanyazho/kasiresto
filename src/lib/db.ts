@@ -26,7 +26,7 @@ export async function query<T = unknown>(sql: string, args: (string | number | n
     sql,
     args
   });
-  return result as { rows: T[] };
+  return { rows: result.rows as unknown as T[] };
 }
 
 export async function execMany(sql: string) {

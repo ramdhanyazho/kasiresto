@@ -38,7 +38,7 @@ export async function PUT(req: Request) {
            note = COALESCE(?, note),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [payload.label, payload.capacity, payload.status, payload.note ?? null, payload.id]
+      [payload.label ?? null, payload.capacity ?? null, payload.status ?? null, payload.note ?? null, payload.id]
     );
     return NextResponse.json({ ok: true });
   } catch (error) {
