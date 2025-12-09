@@ -47,6 +47,24 @@ export type OrderWithItems = Order & {
   items: OrderItemWithMenu[];
 };
 
+export type Payment = {
+  id: number;
+  order_id: number;
+  payment_method: 'CASH' | 'QRIS' | 'SHOPEEPAY' | 'GOPAY';
+  payment_status: 'unpaid' | 'pending' | 'paid' | 'failed';
+  amount: number;
+  reference?: string | null;
+  paid_at?: string | null;
+  created_at?: string;
+};
+
+export type User = {
+  id: number;
+  email: string;
+  name: string;
+  role: 'ADMIN' | 'KASIR' | 'OWNER';
+};
+
 export type Staff = {
   id: number;
   name: string;

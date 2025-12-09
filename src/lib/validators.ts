@@ -51,3 +51,8 @@ export const tableSchema = z.object({
 export const tableUpdateSchema = tableSchema.partial().extend({
   id: z.number().int().positive()
 });
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(3)
+});

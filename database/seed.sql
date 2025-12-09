@@ -25,3 +25,7 @@ INSERT INTO inventory (name, stock, unit, threshold) VALUES
   ('Ayam', 30, 'kg', 10),
   ('Telur', 200, 'butir', 80),
   ('Gula', 25, 'kg', 10);
+
+INSERT INTO users (email, name, role, password) VALUES
+  ('admin@example.com', 'Admin Demo', 'ADMIN', 'admin123'),
+  ('kasir@example.com', 'Kasir Demo', 'KASIR', 'kasir123');

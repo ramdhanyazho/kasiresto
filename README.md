@@ -13,7 +13,7 @@ Rewrite Nadha Resto menjadi stack modern berbasis Next.js (App Router) yang siap
 - Akun Turso atau libSQL self-host untuk database (env `TURSO_DATABASE_URL` dan `TURSO_AUTH_TOKEN`).
 
 ## Menjalankan secara lokal
-1. Instal dependency: `npm install` (jalankan di folder `zozotech-pos-resto`).  
+1. Instal dependency: `npm install` (jalankan di folder `zozotech-pos-resto`).
 2. Buat file `.env.local`:
    ```env
    TURSO_DATABASE_URL="libsql://your-db-url.turso.io"
@@ -26,6 +26,17 @@ Rewrite Nadha Resto menjadi stack modern berbasis Next.js (App Router) yang siap
    npm run db:seed
    ```
 4. Jalankan dev server: `npm run dev` lalu buka `http://localhost:3000`.
+
+## Akun & role
+- Admin: `admin@example.com` / `admin123`
+- Kasir: `kasir@example.com` / `kasir123`
+
+Login di `/login`. Role ADMIN bisa mengakses `/admin`, role ADMIN & KASIR bisa membuka `/kasir`.
+
+## Alur cepat
+- Self-order pelanggan: buka `/order/{tableId}` lalu tambah item, pesanan masuk ke dashboard kasir.
+- Dashboard kasir: kelola pesanan, ubah status, dan buat pesanan manual.
+- Admin: lihat ringkasan menu, meja, dan user demo.
 
 ## Deploy ke Vercel
 - Buat project Vercel baru, pilih folder `zozotech-pos-resto`.
