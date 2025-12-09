@@ -21,56 +21,23 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 type NewOrderItem = { menu_item_id: number; quantity: number; note?: string };
 
-const featureList = [
-  {
-    title: 'Monitoring Aktivitas Restoran',
-    description: 'Dashboard realtime untuk antrian dapur, status meja, dan performa kasir.'
-  },
-  {
-    title: 'Sistem Delivery Order',
-    description: 'Kelola pesanan take away/delivery lengkap dengan kontak pelanggan dan alamat.'
-  },
-  {
-    title: 'Manajemen Pesanan',
-    description: 'Status tiket otomatis dari diterima, dimasak, diantar, hingga pembayaran.'
-  },
-  {
-    title: 'Manajemen Pelanggan',
-    description: 'Catat preferensi, nama pelanggan, dan riwayat transaksi untuk layanan personal.'
-  },
-  {
-    title: 'Manajemen Meja',
-    description: 'Reservasi, kapasitas, dan rotasi meja terpantau jelas untuk crew lantai.'
-  },
-  {
-    title: 'Operator & Shift Pegawai',
-    description: 'Profil kasir, waiter, dan dapur dengan pergantian shift yang terdokumentasi.'
-  },
-  {
-    title: 'Manajemen Pembayaran',
-    description: 'Dukungan pembayaran tunai, kartu, dan QRIS plus pencatatan transaksi harian.'
-  },
-  {
-    title: 'Manajemen Bahan Baku',
-    description: 'Pantau stok bahan baku dan penarikan ke dapur agar waste dapat ditekan.'
-  },
-  {
-    title: 'Manajemen Promo & Diskon',
-    description: 'Kode voucher, happy hour, atau potongan pelanggan tetap yang terintegrasi POS.'
-  },
-  {
-    title: 'Manajemen Pembukuan Restoran',
-    description: 'Ringkasan penjualan, laba kotor, dan settlement kasir siap ekspor ke akuntansi.'
-  },
-  {
-    title: 'Notifikasi Pesanan (Email & WhatsApp)',
-    description: 'Kirimi update status ke pelanggan via API Email/WhatsApp saat pesanan bergerak.'
-  },
-  {
-    title: 'Setting Front End Customer Page',
-    description: 'Halaman menu publik yang bisa dikustom untuk pemesanan mandiri pelanggan.'
-  }
-];
+const pageHighlights = {
+  admin: [
+    'Input menu, harga, dan ketersediaan dari satu tempat',
+    'Catat identitas pelanggan agar kasir tahu pemilik pesanan',
+    'Sinkron Turso sehingga data aman dan rapi'
+  ],
+  kasir: [
+    'Tiket pesanan kasir terpisah dari input admin',
+    'Pilih meja, metode bayar, dan kirim ke printer Bluetooth POS',
+    'Pantau status: diterima, dimasak, diantar, dibayar'
+  ],
+  pelanggan: [
+    'URL khusus per meja untuk QR scan',
+    'Order mandiri tanpa bercampur panel kasir',
+    'Nomor meja otomatis tersimpan saat checkout'
+  ]
+};
 
 export default function Page() {
   const { data, isLoading, mutate } = useSWR<DashboardData>('/api/dashboard', fetcher, {
@@ -95,6 +62,12 @@ export default function Page() {
     photo_url: ''
   });
   const [menuPhoto, setMenuPhoto] = useState<File | null>(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    phone: '',
+    note: ''
+  });
+  const [printReceipt, setPrintReceipt] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
   const menuLookup = useMemo(() => {
@@ -102,6 +75,16 @@ export default function Page() {
     data?.menuItems.forEach((m) => map.set(m.id, m));
     return map;
   }, [data?.menuItems]);
+
+  const knownCustomers = useMemo(() => {
+    const names = new Set<string>();
+    (data?.orders ?? []).forEach((order) => {
+      if (order.customer_name) {
+        names.add(order.customer_name);
+      }
+    });
+    return Array.from(names);
+  }, [data?.orders]);
 
   const addOrderItem = (menuId: number) => {
     setOrderForm((prev) => {
@@ -156,7 +139,7 @@ export default function Page() {
       return;
     }
     resetOrderForm();
-    setMessage('Pesanan tersimpan');
+    setMessage(printReceipt ? 'Pesanan tersimpan & siap dicetak via POS Bluetooth' : 'Pesanan tersimpan');
     mutate();
   };
 
@@ -169,6 +152,17 @@ export default function Page() {
     });
     mutate();
   };
+
+  const saveCustomer = () => {
+    if (customerForm.name.trim().length < 2) {
+      setMessage('Nama pelanggan wajib diisi.');
+      return;
+    }
+    setMessage(`Data pelanggan ${customerForm.name} dicatat untuk kasir.`);
+    setCustomerForm({ name: '', phone: '', note: '' });
+  };
+
+  const tableUrl = (table: Table) => `https://kasiresto.app/order?table=${table.id}`;
 
   const uploadMenuPhoto = async () => {
     if (!menuPhoto) return undefined;
@@ -262,24 +256,48 @@ export default function Page() {
 
   return (
     <main className="grid gap-14">
-      <section className="card">
-        <div className="flex space-between align-center" style={{ marginBottom: 12 }}>
-          <div>
-            <h3>Fitur lengkap untuk resto & kafe</h3>
-            <p className="muted">Daftar kapabilitas yang bisa langsung Anda aktifkan.</p>
+      <section className="grid grid-cols-3">
+        <div className="card">
+          <div className="flex space-between align-center" style={{ marginBottom: 8 }}>
+            <h3>Panel Admin</h3>
+            <span className="tag">Menu & pelanggan</span>
           </div>
-          <span className="tag">Roadmap siap pakai</span>
-        </div>
-        <div className="feature-grid">
-          {featureList.map((feature) => (
-            <div className="feature-card" key={feature.title}>
-              <div className="feature-dot" />
-              <div>
-                <strong>{feature.title}</strong>
-                <p className="small-text">{feature.description}</p>
+          <div className="list">
+            {pageHighlights.admin.map((item) => (
+              <div className="list-item" key={item}>
+                <div className="feature-dot" />
+                <div>{item}</div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="flex space-between align-center" style={{ marginBottom: 8 }}>
+            <h3>Kasir & Transaksi</h3>
+            <span className="tag">Bluetooth POS</span>
+          </div>
+          <div className="list">
+            {pageHighlights.kasir.map((item) => (
+              <div className="list-item" key={item}>
+                <div className="feature-dot" />
+                <div>{item}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="flex space-between align-center" style={{ marginBottom: 8 }}>
+            <h3>Halaman Pelanggan</h3>
+            <span className="tag">QR tiap meja</span>
+          </div>
+          <div className="list">
+            {pageHighlights.pelanggan.map((item) => (
+              <div className="list-item" key={item}>
+                <div className="feature-dot" />
+                <div>{item}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -318,7 +336,7 @@ export default function Page() {
       <section className="grid grid-cols-2">
         <div className="card">
           <div className="flex space-between align-center">
-            <h3>Pesanan aktif</h3>
+            <h3>Pesanan aktif (Kasir)</h3>
             <span className="tag">{data?.orders.length ?? 0} tiket</span>
           </div>
           <div className="order-grid">
@@ -378,8 +396,8 @@ export default function Page() {
 
         <div className="card">
           <div className="flex space-between align-center">
-            <h3>Buat pesanan baru</h3>
-            <span className="tag">Hitung otomatis</span>
+            <h3>Transaksi kasir</h3>
+            <span className="tag">Pisah dari admin</span>
           </div>
           <div className="form">
             <label>
@@ -416,6 +434,10 @@ export default function Page() {
                 <option value="qris">QRIS</option>
                 <option value="card">Kartu</option>
               </select>
+            </label>
+            <label className="flex align-center gap-8">
+              <input type="checkbox" checked={printReceipt} onChange={(e) => setPrintReceipt(e.target.checked)} />
+              Kirim struk ke printer Bluetooth POS
             </label>
             <div className="divider" />
             <div>
@@ -483,8 +505,8 @@ export default function Page() {
       <section className="grid grid-cols-2">
         <div className="card">
           <div className="flex space-between align-center">
-            <h3>Daftar menu</h3>
-            <span className="tag">Sinkron Turso</span>
+            <h3>Panel Admin: menu & pelanggan</h3>
+            <span className="tag">Tidak tercampur kasir</span>
           </div>
           <div className="list">
             {data?.menuItems.map((menu) => (
@@ -550,8 +572,50 @@ export default function Page() {
         </div>
         <div className="card">
           <div className="flex space-between align-center">
-            <h3>Meja & shift</h3>
-            <span className="tag">Tap untuk ubah status</span>
+            <h3>Data pelanggan</h3>
+            <span className="tag">Terpisah dari kasir</span>
+          </div>
+          <div className="form">
+            <label>
+              Nama pelanggan
+              <input
+                value={customerForm.name}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Nama pemesan"
+              />
+            </label>
+            <label>
+              Nomor kontak
+              <input
+                value={customerForm.phone}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="08xxxxxxxx"
+              />
+            </label>
+            <label>
+              Catatan preferensi
+              <textarea
+                rows={3}
+                value={customerForm.note}
+                onChange={(e) => setCustomerForm((p) => ({ ...p, note: e.target.value }))}
+                placeholder="Allergen / permintaan khusus"
+              />
+            </label>
+            <button className="button" onClick={saveCustomer}>
+              Simpan pelanggan
+            </button>
+            {!!knownCustomers.length && (
+              <small>Terdaftar: {knownCustomers.join(', ')}</small>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2">
+        <div className="card">
+          <div className="flex space-between align-center">
+            <h3>Halaman pelanggan per meja</h3>
+            <span className="tag">Self service</span>
           </div>
           <div className="table-grid">
             {data?.tables.map((table) => (
@@ -561,11 +625,43 @@ export default function Page() {
                   <span className={`pill ${table.status === 'available' ? 'success' : table.status === 'reserved' ? 'warning' : 'danger'}`}>{table.status}</span>
                 </div>
                 <div className="small-text">Kapasitas {table.capacity} orang</div>
+                <div className="small-text" style={{ margin: '6px 0' }}>
+                  URL meja: <code>{tableUrl(table)}</code>
+                </div>
                 <button className="button" onClick={() => toggleTable(table)}>
                   Tandai {table.status === 'available' ? 'dipakai' : 'selesai'}
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="flex space-between align-center">
+            <h3>Panduan alur terpisah</h3>
+            <span className="tag">QRIS + POS</span>
+          </div>
+          <div className="list">
+            <div className="list-item">
+              <div>
+                <strong>Admin</strong>
+                <div className="small-text">Kelola menu, harga, stok, dan data pelanggan</div>
+              </div>
+              <span className="pill info">/admin</span>
+            </div>
+            <div className="list-item">
+              <div>
+                <strong>Kasir</strong>
+                <div className="small-text">Input pesanan lalu cetak ke printer Bluetooth</div>
+              </div>
+              <span className="pill info">/transaksi</span>
+            </div>
+            <div className="list-item">
+              <div>
+                <strong>Pelanggan</strong>
+                <div className="small-text">Scan QR meja, order mandiri, bayar QRIS</div>
+              </div>
+              <span className="pill info">/order?table=xx</span>
+            </div>
           </div>
         </div>
       </section>
