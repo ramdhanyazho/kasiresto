@@ -38,13 +38,13 @@ export type OrderItem = {
   note?: string | null;
 };
 
+export type OrderItemWithMenu = OrderItem & {
+  menu_name?: string;
+  menu_category?: string;
+};
+
 export type OrderWithItems = Order & {
-  items: Array<
-    OrderItem & {
-      menu_name?: string;
-      menu_category?: string;
-    }
-  >;
+  items: OrderItemWithMenu[];
 };
 
 export type Staff = {

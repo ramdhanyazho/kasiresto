@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import type { MenuItem, Order, OrderWithItems, Table } from '@/lib/types';
+import type { MenuItem, Order, OrderItemWithMenu, OrderWithItems, Table } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,18 +10,13 @@ export async function GET() {
   const ordersBase = await query<Order>('SELECT * FROM orders ORDER BY created_at DESC LIMIT 24');
   const orderIds = ordersBase.rows.map((o) => o.id);
 
-  let items: Array<
-    {
-      menu_name?: string;
-      menu_category?: string;
-    } & { id: number; order_id: number; menu_item_id: number; quantity: number; price: number }
-  > = [];
+  let items: OrderItemWithMenu[] = [];
 
   if (orderIds.length) {
     const placeholders = orderIds.map(() => '?').join(',');
     items =
       (
-        await query(
+        await query<OrderItemWithMenu>(
           `SELECT oi.*, m.name as menu_name, m.category as menu_category
          FROM order_items oi
          LEFT JOIN menu_items m ON m.id = oi.menu_item_id
