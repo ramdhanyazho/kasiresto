@@ -1,6 +1,7 @@
 import { createClient, Client } from '@libsql/client';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { resolve } from 'path';
+import { dirname, resolve } from 'path';
 
 type ClientType = Client;
 
@@ -9,7 +10,20 @@ declare global {
   var __tursoClient: ClientType | undefined;
 }
 
-const url = process.env.TURSO_DATABASE_URL ?? 'file:./database/local.db';
+const defaultDbPath = process.env.VERCEL || process.env.NODE_ENV === 'production'
+  ? resolve('/tmp', 'kasiresto-local.db')
+  : resolve(process.cwd(), 'database/local.db');
+
+if (!process.env.TURSO_DATABASE_URL) {
+  const dbDir = dirname(defaultDbPath);
+  mkdirSync(dbDir, { recursive: true });
+
+  if (!existsSync(defaultDbPath)) {
+    writeFileSync(defaultDbPath, '');
+  }
+}
+
+const url = process.env.TURSO_DATABASE_URL ?? `file:${defaultDbPath}`;
 const authToken = process.env.TURSO_AUTH_TOKEN;
 
 const client: ClientType =
