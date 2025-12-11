@@ -75,7 +75,7 @@ type DashboardData = {
   };
 };
 
-type MenuFormValues = z.infer<typeof menuSchema>;
+type MenuFormValues = z.input<typeof menuSchema>;
 type UserFormValues = z.infer<typeof userFormSchema>;
 
 const defaultMenuValues: MenuFormValues = {
