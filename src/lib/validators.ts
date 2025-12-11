@@ -56,3 +56,23 @@ export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(3)
 });
+
+export const userCreateSchema = z.object({
+  name: z.string().min(2, 'Nama wajib diisi'),
+  email: z.string().email('Format email tidak valid'),
+  role: z.enum(['ADMIN', 'KASIR'], {
+    required_error: 'Role wajib dipilih'
+  }),
+  password: z.string().min(4, 'Password minimal 4 karakter')
+});
+
+export const userUpdateSchema = userCreateSchema
+  .omit({ password: true })
+  .extend({
+    id: z.number().int().positive(),
+    password: z
+      .string()
+      .min(4, 'Password minimal 4 karakter')
+      .optional()
+      .transform((value) => (value === '' ? undefined : value))
+  });
