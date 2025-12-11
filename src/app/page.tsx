@@ -22,10 +22,10 @@ export default function Home() {
             <h4 className="mb-2 font-semibold">Akun Demo</h4>
             <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
               <li>
-                <span className="font-medium text-foreground">Admin:</span> admin@example.com / admin123
+                <span className="font-medium text-foreground">Admin:</span> admin@example.com
               </li>
               <li>
-                <span className="font-medium text-foreground">Kasir:</span> kasir@example.com / kasir123
+                <span className="font-medium text-foreground">Kasir:</span> kasir@example.com
               </li>
             </ul>
           </div>
