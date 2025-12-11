@@ -60,7 +60,7 @@ export const loginSchema = z.object({
 export const userCreateSchema = z.object({
   name: z.string().min(2, 'Nama wajib diisi'),
   email: z.string().email('Format email tidak valid'),
-  role: z.enum(['ADMIN', 'KASIR'], {
+  role: z.enum(['ADMIN', 'KASIR', 'OWNER'], {
     required_error: 'Role wajib dipilih'
   }),
   password: z.string().min(4, 'Password minimal 4 karakter')

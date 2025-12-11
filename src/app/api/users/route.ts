@@ -30,7 +30,7 @@ export async function PUT(req: Request) {
   try {
     const payload = userUpdateSchema.parse(await req.json());
 
-    const fields = [payload.name, payload.email, payload.role];
+    const fields: (string | number)[] = [payload.name, payload.email, payload.role];
     let updateSql = 'UPDATE users SET name = ?, email = ?, role = ?';
 
     if (payload.password) {
