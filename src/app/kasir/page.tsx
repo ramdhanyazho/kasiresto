@@ -1,287 +1,222 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
-import { useMemo, useState } from 'react';
-import type { MenuItem, OrderWithItems, Table } from '@/lib/types';
+import { PlusCircle, MinusCircle, Trash2, ShoppingCart, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatIDR } from '@/lib/format';
+import type { MenuItem } from '@/lib/types';
 
-type DashboardData = {
+// --- Types ---
+type CartItem = {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+};
+type MenuApiResponse = {
   menuItems: MenuItem[];
-  tables: Table[];
-  orders: OrderWithItems[];
 };
 
+// --- SWR Fetcher ---
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
-const statusLabels: Record<OrderWithItems['status'], { label: string; tone: string }> = {
-  pending: { label: 'Menunggu', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
-  accepted: { label: 'Diterima', tone: 'bg-blue-50 text-blue-700 border-blue-200' },
-  preparing: { label: 'Diproses', tone: 'bg-orange-50 text-orange-700 border-orange-200' },
-  served: { label: 'Siap Saji', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  paid: { label: 'Lunas', tone: 'bg-teal-50 text-teal-700 border-teal-200' },
-  cancelled: { label: 'Dibatalkan', tone: 'bg-red-50 text-red-700 border-red-200' }
-};
 
-function StatusBadge({ status }: { status: OrderWithItems['status'] }) {
-  const tone = statusLabels[status];
-  return <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${tone.tone}`}>{tone.label}</span>;
-}
+// --- Skeleton Component for Loading State ---
+const MenuGridSkeleton = () => (
+  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+    {Array.from({ length: 10 }).map((_, i) => (
+      <Card key={i} className="overflow-hidden">
+        <CardHeader className="p-0">
+          <Skeleton className="w-full h-32" />
+        </CardHeader>
+        <CardContent className="p-3">
+          <Skeleton className="h-5 w-3/4 mb-2" />
+          <Skeleton className="h-4 w-1/2" />
+        </CardContent>
+        <CardFooter className="p-3 pt-0">
+          <Skeleton className="h-9 w-full" />
+        </CardFooter>
+      </Card>
+    ))}
+  </div>
+);
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-sm">{children}</div>;
-}
-
+// --- Main Kasir Page Component ---
 export default function KasirPage() {
-  const { data, mutate } = useSWR<DashboardData>('/api/dashboard', fetcher, { refreshInterval: 8000 });
-  const [selectedTable, setSelectedTable] = useState<number | ''>('');
-  const [selectedMenu, setSelectedMenu] = useState<number | ''>('');
-  const [qty, setQty] = useState(1);
-  const [note, setNote] = useState('');
-  const [customerName, setCustomerName] = useState('Walk-in');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { data, error, isLoading } = useSWR<MenuApiResponse>('/api/menu', fetcher);
 
-  const pending = useMemo(() => data?.orders.filter((o) => o.status === 'pending') ?? [], [data?.orders]);
-  const inProgress = useMemo(
-    () => data?.orders.filter((o) => ['accepted', 'preparing'].includes(o.status)) ?? [],
-    [data?.orders]
-  );
-  const ready = useMemo(() => data?.orders.filter((o) => o.status === 'served') ?? [], [data?.orders]);
-  const paid = useMemo(() => data?.orders.filter((o) => o.status === 'paid') ?? [], [data?.orders]);
+  const menuItems = data?.menuItems ?? [];
+  const menuCategories = useMemo(() => {
+    const categories = menuItems.map(item => item.category);
+    return [...new Set(categories)];
+  }, [menuItems]);
 
-  const createOrder = async () => {
-    if (!selectedMenu) return;
-    const body = {
-      table_id: selectedTable === '' ? null : Number(selectedTable),
-      customer_name: customerName,
-      payment_method: 'cash',
-      items: [
-        {
-          menu_item_id: Number(selectedMenu),
-          quantity: qty,
-          note: note || undefined
-        }
-      ]
+  const addToCart = (item: MenuItem) => {
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((cartItem) => cartItem.id === item.id);
+      if (existingItem) {
+        return prevCart.map((cartItem) =>
+          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+        );
+      }
+      return [...prevCart, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+    });
+  };
+
+  const updateQuantity = (id: number, amount: number) => {
+    setCart((prevCart) => 
+      prevCart
+        .map((item) => (item.id === id ? { ...item, quantity: item.quantity + amount } : item))
+        .filter((item) => item.quantity > 0)
+    );
+  };
+
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const handleSubmitOrder = async () => {
+    if (cart.length === 0) return;
+    setIsSubmitting(true);
+
+    const payload = {
+      payment_method: 'qris', // Hardcoded for now
+      items: cart.map(item => ({
+        menu_item_id: item.id,
+        quantity: item.quantity
+      }))
     };
 
-    await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    setNote('');
-    setQty(1);
-    setSelectedMenu('');
-    mutate();
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Gagal membuat pesanan');
+      }
+      alert(`Pesanan berhasil dibuat dengan total ${formatIDR(total)}`);
+      setCart([]);
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-  const updateStatus = async (id: number, status: OrderWithItems['status']) => {
-    await fetch('/api/orders', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status })
-    });
-    mutate();
-  };
-
-  const renderOrderCard = (order: OrderWithItems) => (
-    <Card key={order.id}>
-      <div className="flex items-center justify-between text-sm">
-        <div>
-          <p className="font-semibold text-slate-800">Order #{order.id}</p>
-          <p className="text-slate-500">Meja {order.table_id ?? '-'}</p>
-        </div>
-        <StatusBadge status={order.status} />
-      </div>
-      <ul className="mt-3 space-y-2 text-sm text-slate-700">
-        {order.items.map((item) => (
-          <li key={item.id} className="flex justify-between">
-            <span>
-              {item.quantity}x {item.menu_name}
-            </span>
-            <span className="font-medium">{formatIDR(item.price * item.quantity)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex items-center justify-between text-sm">
-        <p className="font-semibold text-slate-800">{formatIDR(order.total)}</p>
-        <div className="flex flex-wrap gap-2 text-xs">
-          {order.status === 'pending' && (
-            <button
-              className="rounded-lg bg-blue-50 px-3 py-1 font-semibold text-blue-700 hover:bg-blue-100"
-              onClick={() => updateStatus(order.id, 'accepted')}
-            >
-              Terima
-            </button>
-          )}
-          {order.status === 'accepted' && (
-            <button
-              className="rounded-lg bg-orange-50 px-3 py-1 font-semibold text-orange-700 hover:bg-orange-100"
-              onClick={() => updateStatus(order.id, 'preparing')}
-            >
-              Proses
-            </button>
-          )}
-          {order.status === 'preparing' && (
-            <button
-              className="rounded-lg bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100"
-              onClick={() => updateStatus(order.id, 'served')}
-            >
-              Sajikan
-            </button>
-          )}
-          {order.status === 'served' && (
-            <button
-              className="rounded-lg bg-teal-600 px-3 py-1 font-semibold text-white shadow-sm hover:bg-teal-700"
-              onClick={() => updateStatus(order.id, 'paid')}
-            >
-              Tandai Lunas
-            </button>
-          )}
-        </div>
-      </div>
-    </Card>
-  );
+  
+  const renderMenuGrid = (category: string) => {
+    const items = menuItems.filter(item => item.category === category && item.is_available);
+    if (!items.length) {
+      return <p className="text-muted-foreground text-center col-span-full">Tidak ada item di kategori ini.</p>
+    }
+    return items.map((item) => (
+      <Card key={item.id} className="overflow-hidden flex flex-col">
+        <CardHeader className="p-0">
+          <img src={item.photo_url ?? 'https://via.placeholder.com/300'} alt={item.name} className="w-full h-32 object-cover"/>
+        </CardHeader>
+        <CardContent className="p-3 flex-1">
+          <h3 className="font-semibold truncate">{item.name}</h3>
+          <p className="text-sm text-muted-foreground">{formatIDR(item.price)}</p>
+        </CardContent>
+        <CardFooter className="p-3 pt-0">
+          <Button className="w-full" size="sm" onClick={() => addToCart(item)}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Tambah
+          </Button>
+        </CardFooter>
+      </Card>
+    ));
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white px-6 py-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-emerald-600">Kasir</p>
-            <h1 className="text-3xl font-bold text-slate-800">Dashboard Pesanan</h1>
-            <p className="text-sm text-slate-600">Pantau alur pesanan dan buat order baru.</p>
-          </div>
-          <div className="flex gap-2 text-sm">
-            <button className="rounded-xl border border-emerald-200 px-3 py-2 font-semibold text-emerald-700" onClick={() => mutate()}>
-              Refresh
-            </button>
-          </div>
-        </div>
+    <div className="flex h-screen bg-muted/40">
+      {/* Main Content: Menu */}
+      <main className="flex-1 flex flex-col p-6">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight">Point of Sale</h1>
+          <p className="text-muted-foreground">Pilih item dari menu untuk membuat pesanan.</p>
+        </header>
+        <Tabs defaultValue={menuCategories[0]} className="flex-1 flex flex-col">
+          <TabsList className="mb-4">
+            {menuCategories.map(category => (
+              <TabsTrigger key={category} value={category}>{category}</TabsTrigger>
+            ))}
+          </TabsList>
 
-        <section className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <p className="text-sm text-slate-500">Menunggu</p>
-            <p className="text-3xl font-bold text-amber-600">{pending.length}</p>
-          </Card>
-          <Card>
-            <p className="text-sm text-slate-500">Diproses</p>
-            <p className="text-3xl font-bold text-blue-600">{inProgress.length}</p>
-          </Card>
-          <Card>
-            <p className="text-sm text-slate-500">Siap Saji</p>
-            <p className="text-3xl font-bold text-emerald-600">{ready.length}</p>
-          </Card>
-          <Card>
-            <p className="text-sm text-slate-500">Lunas</p>
-            <p className="text-3xl font-bold text-teal-600">{paid.length}</p>
-          </Card>
-        </section>
-
-        <section className="grid gap-5 lg:grid-cols-[2fr,1fr]">
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <h2 className="text-lg font-semibold text-slate-800">Menunggu ({pending.length})</h2>
-              </div>
-              {pending.length ? (
-                <div className="grid gap-3 md:grid-cols-2">{pending.map((order) => renderOrderCard(order))}</div>
-              ) : (
-                <Card>Semua pesanan sudah ditangani.</Card>
-              )}
+          {error && (
+            <div className="flex flex-col items-center justify-center h-full text-destructive">
+              <AlertCircle className="h-10 w-10 mb-2"/>
+              <p className="font-semibold">Gagal memuat menu</p>
+              <p className="text-sm">{error.message}</p>
             </div>
+          )}
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                <h2 className="text-lg font-semibold text-slate-800">Sedang diproses ({inProgress.length})</h2>
-              </div>
-              {inProgress.length ? (
-                <div className="grid gap-3 md:grid-cols-2">{inProgress.map((order) => renderOrderCard(order))}</div>
-              ) : (
-                <Card>Belum ada pesanan di dapur.</Card>
-              )}
-            </div>
+          {isLoading && (
+            <TabsContent value="loading" className="flex-1 overflow-y-auto">
+              <MenuGridSkeleton />
+            </TabsContent>
+          )}
 
-            {ready.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <h2 className="text-lg font-semibold text-slate-800">Siap disajikan ({ready.length})</h2>
+          {!isLoading && !error && menuCategories.map(category => (
+             <TabsContent key={category} value={category} className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {renderMenuGrid(category)}
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">{ready.map((order) => renderOrderCard(order))}</div>
-              </div>
-            )}
-          </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+      </main>
 
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-800">Buat pesanan langsung</h2>
-            <p className="mt-1 text-sm text-slate-600">Input singkat untuk pelanggan walk-in.</p>
-            <div className="mt-4 space-y-3 text-sm">
-              <label className="flex flex-col gap-1">
-                <span>Meja</span>
-                <select
-                  className="rounded-xl border border-slate-200 px-3 py-2"
-                  value={selectedTable}
-                  onChange={(e) => setSelectedTable(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">- Tanpa meja -</option>
-                  {data?.tables.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label} ({t.status})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Nama pelanggan</span>
-                <input
-                  className="rounded-xl border border-slate-200 px-3 py-2"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Menu</span>
-                <select
-                  className="rounded-xl border border-slate-200 px-3 py-2"
-                  value={selectedMenu}
-                  onChange={(e) => setSelectedMenu(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">Pilih menu</option>
-                  {data?.menuItems.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} - {formatIDR(m.price)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Qty</span>
-                <input
-                  className="rounded-xl border border-slate-200 px-3 py-2"
-                  type="number"
-                  min={1}
-                  value={qty}
-                  onChange={(e) => setQty(Number(e.target.value))}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Catatan</span>
-                <textarea
-                  className="min-h-[80px] rounded-xl border border-slate-200 px-3 py-2"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-              </label>
-              <button
-                className="w-full rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700"
-                onClick={createOrder}
-              >
-                Simpan Pesanan
-              </button>
+      {/* Right Sidebar: Current Order */}
+      <aside className="w-96 bg-background border-l flex flex-col">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold flex items-center"><ShoppingCart className="mr-3 h-6 w-6" />Pesanan Saat Ini</h2>
+        </div>
+        <Separator />
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {cart.length === 0 ? (
+            <div className="text-center text-muted-foreground mt-10">
+              <p>Keranjang masih kosong.</p>
+              <p className="text-sm">Silakan pilih item dari menu.</p>
             </div>
-          </Card>
-        </section>
-      </div>
-    </main>
+          ) : (
+            cart.map((item) => (
+              <div key={item.id} className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-sm text-muted-foreground">{formatIDR(item.price)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, -1)}><MinusCircle className="h-4 w-4" /></Button>
+                  <span className="font-bold w-4 text-center">{item.quantity}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, 1)}><PlusCircle className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <Separator />
+        <div className="p-6 space-y-4 bg-muted/20">
+            <div className="flex justify-between items-center font-bold text-lg">
+                <span>Total</span>
+                <span>{formatIDR(total)}</span>
+            </div>
+            <div className="flex gap-2">
+                <Button variant="outline" className="w-full" onClick={() => setCart([])} disabled={cart.length === 0 || isSubmitting}>
+                    <Trash2 className="mr-2 h-4 w-4"/> Bersihkan
+                </Button>
+                <Button className="w-full" onClick={handleSubmitOrder} disabled={cart.length === 0 || isSubmitting}>
+                    {isSubmitting ? 'Memproses...' : 'Buat Pesanan'}
+                </Button>
+            </div>
+        </div>
+      </aside>
+    </div>
   );
 }

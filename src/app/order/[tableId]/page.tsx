@@ -1,210 +1,199 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import type { MenuItem, Table } from '@/lib/types';
+import { PlusCircle, MinusCircle, ShoppingCart, AlertCircle, PartyPopper } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatIDR } from '@/lib/format';
+import type { MenuItem, Table as TableType, Order } from '@/lib/types';
 
+// --- Types ---
+type CartItem = { id: number; name: string; price: number; quantity: number };
+type MenuApiResponse = { menuItems: MenuItem[] };
+type TablesApiResponse = { tables: TableType[] };
+
+// --- SWR Fetcher ---
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-type DashboardData = { menuItems: MenuItem[]; tables: Table[] };
-
-type StatusBadgeProps = { label: string; tone?: 'emerald' | 'amber' | 'red' | 'slate' };
-const StatusBadge = ({ label, tone = 'emerald' }: StatusBadgeProps) => {
-  const colors: Record<NonNullable<StatusBadgeProps['tone']>, string> = {
-    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-    amber: 'bg-amber-50 text-amber-700 border-amber-100',
-    red: 'bg-red-50 text-red-700 border-red-100',
-    slate: 'bg-slate-50 text-slate-700 border-slate-200'
-  };
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${colors[tone]}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {label}
-    </span>
-  );
-};
-
-const ActionButton = ({ children, onClick, disabled = false }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-  >
-    {children}
-  </button>
-);
-
+// --- Main Order Page Component ---
 export default function OrderPage() {
-  const params = useParams<{ tableId: string }>();
   const router = useRouter();
-  const { data, isLoading } = useSWR<DashboardData>('/api/dashboard', fetcher, { refreshInterval: 12000 });
-  const [cart, setCart] = useState<Record<number, number>>({});
-  const [customerName, setCustomerName] = useState('Tamu');
-  const [isSending, setIsSending] = useState(false);
+  const params = useParams<{ tableId: string }>();
+  const tableId = Number(params.tableId);
 
-  const table = data?.tables.find((t) => t.id === Number(params.tableId));
-  const activeMenu = useMemo(() => data?.menuItems.filter((m) => m.is_available) ?? [], [data?.menuItems]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
 
-  const total = useMemo(
-    () =>
-      Object.entries(cart).reduce((sum, [menuId, qty]) => {
-        const menu = data?.menuItems.find((m) => m.id === Number(menuId));
-        return sum + (menu?.price ?? 0) * qty;
-      }, 0),
-    [cart, data?.menuItems]
+  // --- Data Fetching ---
+  const { data: menuData, error: menuError } = useSWR<MenuApiResponse>('/api/menu', fetcher);
+  const { data: tablesData, error: tablesError } = useSWR<TablesApiResponse>('/api/tables', fetcher);
+  
+  const menuItems = menuData?.menuItems ?? [];
+  const tables = tablesData?.tables ?? [];
+  
+  const menuCategories = useMemo(() => [...new Set(menuItems.map(item => item.category))], [menuItems]);
+  
+  const isLoading = !menuData && !menuError;
+  const error = menuError || tablesError;
+
+  // --- Cart Logic ---
+  const addToCart = (item: MenuItem) => setCart(prev => {
+    const existing = prev.find(i => i.id === item.id);
+    if (existing) return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+    return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1 }];
+  });
+
+  const updateQuantity = (id: number, amount: number) => setCart(prev => 
+    prev.map(i => i.id === id ? { ...i, quantity: i.quantity + amount } : i).filter(i => i.quantity > 0)
+  );
+  
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // --- Event Handlers ---
+  const handleTableChange = (value: string) => router.push(`/order/${value}`);
+  
+  const handleSubmitOrder = async () => {
+    if (cart.length === 0) return;
+    setIsSubmitting(true);
+
+    const payload = {
+      table_id: tableId,
+      payment_method: 'qris',
+      items: cart.map(item => ({ menu_item_id: item.id, quantity: item.quantity })),
+    };
+
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Gagal membuat pesanan');
+      
+      const { order } = await res.json();
+      setSubmittedOrder(order);
+      setCart([]);
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- Render Logic ---
+  if (error) return (
+    <div className="flex flex-col items-center justify-center h-screen text-destructive">
+      <AlertCircle className="h-10 w-10 mb-2"/>
+      <p className="font-semibold">Gagal memuat data</p>
+      <p className="text-sm">{error.message}</p>
+    </div>
+  );
+  
+  // After order is submitted, show a thank you screen
+  if (submittedOrder) return (
+    <main className="flex min-h-screen flex-col items-center justify-center p-8 text-center">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader>
+          <div className="mx-auto bg-green-100 dark:bg-green-900 rounded-full p-3 w-fit mb-2">
+            <PartyPopper className="h-10 w-10 text-green-500 dark:text-green-400"/>
+          </div>
+          <h1 className="text-2xl font-bold">Pesanan Diterima!</h1>
+          <p className="text-muted-foreground">Terima kasih, pesanan Anda sedang diproses.</p>
+        </CardHeader>
+        <CardContent>
+            <p className="font-semibold">Nomor Pesanan Anda: ORD-{String(submittedOrder.id).padStart(3, '0')}</p>
+        </CardContent>
+        <CardFooter>
+          <Button className="w-full" onClick={() => setSubmittedOrder(null)}>Buat Pesanan Baru</Button>
+        </CardFooter>
+      </Card>
+    </main>
   );
 
-  const addItem = (id: number) => {
-    setCart((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
-  };
-
-  const removeItem = (id: number) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      if (!next[id]) return next;
-      if (next[id] === 1) delete next[id];
-      else next[id] -= 1;
-      return next;
-    });
-  };
-
-  const submitOrder = async () => {
-    if (!Object.keys(cart).length) return;
-    setIsSending(true);
-    const items = Object.entries(cart).map(([menuId, quantity]) => ({
-      menu_item_id: Number(menuId),
-      quantity,
-      note: undefined
-    }));
-
-    await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        table_id: Number(params.tableId),
-        customer_name: customerName,
-        payment_method: 'cash',
-        items
-      })
-    });
-    setCart({});
-    router.push('/kasir');
-  };
-
-  if (isLoading || !data) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 to-white">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />
-      </main>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-white">
-      <header className="sticky top-0 z-10 border-b border-emerald-100 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex flex-col gap-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-600">Self-order</p>
-            <h1 className="text-2xl font-bold text-slate-800">Nadha Resto</h1>
-            <p className="text-sm text-slate-600">Pilih menu favorit lalu kirimkan ke kasir.</p>
+    <div className="flex h-screen bg-muted/40">
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col p-6">
+        <header className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Selamat Datang</h1>
+            <p className="text-muted-foreground">Silakan pilih menu yang Anda inginkan.</p>
           </div>
-          <StatusBadge
-            label={table ? `Meja ${table.label} (${table.status})` : `Meja ${params.tableId}`}
-            tone={table?.status === 'available' ? 'emerald' : table?.status === 'occupied' ? 'amber' : 'slate'}
-          />
-        </div>
-      </header>
+          <div className="flex items-center gap-4">
+            <span className="font-semibold">Meja:</span>
+            <Select onValueChange={handleTableChange} defaultValue={String(tableId)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {tables.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </header>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8 pb-28">
-        <div className="grid gap-4 rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-emerald-100 md:grid-cols-[2fr,1fr]">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">Nama pelanggan</span>
-            <input
-              className="rounded-xl border border-emerald-100 px-4 py-3 text-slate-800 shadow-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-            />
-          </label>
-          <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 text-white shadow-lg">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-100">Total sementara</p>
-              <p className="text-xl font-semibold">{formatIDR(total)}</p>
-            </div>
-            <StatusBadge label={`${Object.values(cart).reduce((a, b) => a + b, 0)} item`} tone="amber" />
-          </div>
-        </div>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Pilih menu</h2>
-            <p className="text-sm text-slate-500">Tap untuk menambah, tahan - untuk mengurangi.</p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {activeMenu.map((menu) => (
-              <div
-                key={menu.id}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="space-y-1">
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {menu.category}
-                  </span>
-                  <h3 className="text-base font-semibold text-slate-800">{menu.name}</h3>
-                  <p className="text-sm font-medium text-emerald-700">{formatIDR(menu.price)}</p>
-                  <p className="text-xs text-slate-500">Klik untuk tambah ke keranjang</p>
+        {isLoading ? <MenuGridSkeleton /> : (
+          <Tabs defaultValue={menuCategories[0]} className="flex-1 flex flex-col">
+            <TabsList className="mb-4">
+              {menuCategories.map(cat => <TabsTrigger key={cat} value={cat}>{cat}</TabsTrigger>)}
+            </TabsList>
+            {menuCategories.map(cat => (
+              <TabsContent key={cat} value={cat} className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {menuItems.filter(i => i.category === cat && i.is_available).map(item => (
+                    <Card key={item.id} className="overflow-hidden flex flex-col">
+                      <CardHeader className="p-0"><img src={item.photo_url ?? ''} alt={item.name} className="w-full h-32 object-cover"/></CardHeader>
+                      <CardContent className="p-3 flex-1">
+                        <h3 className="font-semibold truncate">{item.name}</h3>
+                        <p className="text-sm text-muted-foreground">{formatIDR(item.price)}</p>
+                      </CardContent>
+                      <CardFooter className="p-3 pt-0"><Button className="w-full" size="sm" onClick={() => addToCart(item)}><PlusCircle className="mr-2 h-4 w-4" /> Tambah</Button></CardFooter>
+                    </Card>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  {cart[menu.id] ? (
-                    <div className="flex items-center overflow-hidden rounded-xl border border-emerald-200 shadow-sm">
-                      <button
-                        onClick={() => removeItem(menu.id)}
-                        className="h-9 w-9 bg-emerald-50 text-lg font-bold text-emerald-700 transition hover:bg-emerald-100"
-                      >
-                        –
-                      </button>
-                      <span className="min-w-[2.5rem] text-center text-sm font-semibold text-slate-800">{cart[menu.id]}</span>
-                      <button
-                        onClick={() => addItem(menu.id)}
-                        className="h-9 w-9 bg-emerald-600 text-lg font-bold text-white transition hover:bg-emerald-700"
-                      >
-                        +
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => addItem(menu.id)}
-                      className="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-400 hover:text-emerald-800"
-                    >
-                      Pilih
-                    </button>
-                  )}
-                </div>
-              </div>
+              </TabsContent>
             ))}
-            {!activeMenu.length && (
-              <div className="rounded-2xl border border-dashed border-emerald-200 bg-white/70 p-6 text-center text-sm text-slate-500">
-                Menu belum tersedia.
-              </div>
-            )}
-          </div>
-        </section>
+          </Tabs>
+        )}
       </main>
 
-      {Boolean(Object.keys(cart).length) && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-emerald-100 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-4">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-800">Total {formatIDR(total)}</p>
-              <p className="text-xs text-slate-600">{Object.values(cart).reduce((a, b) => a + b, 0)} item dalam keranjang</p>
+      {/* Cart Sidebar */}
+      <aside className="w-96 bg-background border-l flex flex-col">
+        <div className="p-6"><h2 className="text-2xl font-bold flex items-center"><ShoppingCart className="mr-3 h-6 w-6" />Pesanan Anda</h2></div>
+        <Separator />
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {!cart.length ? <p className="text-muted-foreground text-center mt-10">Keranjang masih kosong.</p> : cart.map(item => (
+            <div key={item.id} className="flex items-center justify-between">
+              <div><p className="font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{formatIDR(item.price)}</p></div>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, -1)}><MinusCircle className="h-4 w-4" /></Button>
+                <span className="font-bold w-4 text-center">{item.quantity}</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, 1)}><PlusCircle className="h-4 w-4" /></Button>
+              </div>
             </div>
-            <ActionButton onClick={submitOrder} disabled={isSending}>
-              {isSending ? 'Mengirim...' : 'Kirim ke kasir'}
-            </ActionButton>
-          </div>
+          ))}
         </div>
-      )}
+        <Separator />
+        <div className="p-6 space-y-4 bg-muted/20">
+            <div className="flex justify-between items-center font-bold text-lg"><span>Total</span><span>{formatIDR(total)}</span></div>
+            <Button className="w-full text-lg" onClick={handleSubmitOrder} disabled={!cart.length || isSubmitting}>
+                {isSubmitting ? 'Memproses...' : 'Pesan Sekarang'}
+            </Button>
+        </div>
+      </aside>
     </div>
   );
 }
+
+const MenuGridSkeleton = () => (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <Card key={i}><CardHeader><Skeleton className="w-full h-32" /></CardHeader><CardContent className="p-3"><Skeleton className="h-5 w-3/4" /></CardContent><CardFooter><Skeleton className="h-9 w-full" /></CardFooter></Card>
+      ))}
+    </div>
+);

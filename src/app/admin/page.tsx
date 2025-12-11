@@ -1,135 +1,185 @@
 'use client';
 
 import useSWR from 'swr';
-import type { MenuItem, Table, User } from '@/lib/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { formatIDR } from '@/lib/format';
+import type { MenuItem, OrderWithItems, Table as TableType, User } from '@/lib/types';
+import { Utensils, BookOpen, User as UserIcon, PlusCircle, MoreHorizontal, AlertCircle } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-type AdminData = {
+type DashboardData = {
   menuItems: MenuItem[];
-  tables: Table[];
+  tables: TableType[];
+  orders: OrderWithItems[];
+  summary: {
+    openOrders: number;
+    revenueToday: number;
+    menuCount: number;
+    availableTables: number;
+  };
 };
-
-const statusTone: Record<Table['status'], string> = {
-  available: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  occupied: 'bg-amber-50 text-amber-700 border-amber-200',
-  reserved: 'bg-blue-50 text-blue-700 border-blue-200',
-  dirty: 'bg-red-50 text-red-700 border-red-200'
-};
-
-const Card = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-sm">{children}</div>
-);
 
 export default function AdminPage() {
-  const { data: dashboard } = useSWR<AdminData>('/api/dashboard', fetcher);
-  const { data: users } = useSWR<{ users: User[] }>('/api/users', fetcher);
+  const { data: dashboard, error: dashboardError } = useSWR<DashboardData>('/api/dashboard', fetcher);
+  const { data: usersData, error: usersError } = useSWR<{ users: User[] }>('/api/users', fetcher);
+  
+  const isLoading = !dashboard && !dashboardError;
+  const error = dashboardError || usersError;
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-destructive">
+        <AlertCircle className="h-10 w-10 mb-2"/>
+        <p className="font-semibold">Gagal memuat data admin</p>
+        <p className="text-sm">{error.message}</p>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-indigo-50 via-white to-white px-6 py-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-indigo-600">Admin</p>
-            <h1 className="text-3xl font-bold text-slate-800">Manajemen Resto</h1>
-            <p className="text-sm text-slate-600">Pantau menu, meja, dan role pengguna dalam satu panel.</p>
-          </div>
-          <div className="rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-lg shadow-indigo-200">
-            Demo dashboard
-          </div>
-        </header>
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <p className="text-sm text-slate-500">Menu aktif</p>
-            <p className="text-3xl font-bold text-indigo-700">{dashboard?.menuItems.length ?? 0}</p>
-            <p className="text-xs text-slate-500">Semua menu yang tersedia untuk dipesan.</p>
-          </Card>
-          <Card>
-            <p className="text-sm text-slate-500">Jumlah meja</p>
-            <p className="text-3xl font-bold text-emerald-700">{dashboard?.tables.length ?? 0}</p>
-            <p className="text-xs text-slate-500">Status realtime dari meja di lantai.</p>
-          </Card>
-          <Card>
-            <p className="text-sm text-slate-500">User</p>
-            <p className="text-3xl font-bold text-amber-600">{users?.users.length ?? 0}</p>
-            <p className="text-xs text-slate-500">Akun demo untuk akses kasir/admin.</p>
-          </Card>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[2fr,1fr]">
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-800">User & Role</h2>
-            <p className="text-sm text-slate-600">Daftar akun demo untuk akses kasir dan admin.</p>
-            <div className="mt-3 overflow-auto rounded-xl border border-slate-100">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Email</th>
-                    <th className="px-3 py-2">Nama</th>
-                    <th className="px-3 py-2">Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users?.users.map((user) => (
-                    <tr key={user.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2">{user.email}</td>
-                      <td className="px-3 py-2">{user.name}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase text-indigo-700">
-                          {user.role}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!users?.users.length && (
-                    <tr>
-                      <td className="px-3 py-4 text-center text-slate-500" colSpan={3}>
-                        Belum ada user.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-800">Menu ringkas</h2>
-            <p className="text-sm text-slate-600">Snapshot kategori dan harga.</p>
-            <div className="mt-3 space-y-2">
-              {dashboard?.menuItems.map((m) => (
-                <div key={m.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm">
-                  <div>
-                    <p className="font-semibold text-slate-800">{m.name}</p>
-                    <p className="text-xs text-slate-500">{m.category}</p>
-                  </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Rp{m.price.toLocaleString('id-ID')}</span>
-                </div>
-              ))}
-              {!dashboard?.menuItems.length && <p className="text-sm text-slate-500">Tidak ada menu.</p>}
-            </div>
-          </Card>
-        </section>
-
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-800">Meja</h2>
-          <p className="text-sm text-slate-600">Cek kapasitas dan status ketersediaan.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            {dashboard?.tables.map((t) => (
-              <div key={t.id} className="space-y-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-base font-semibold text-slate-800">{t.label}</p>
-                  <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone[t.status]}`}>{t.status}</span>
-                </div>
-                <p className="text-sm text-slate-500">Kapasitas {t.capacity} orang</p>
-                {t.note && <p className="text-xs text-amber-700">Catatan: {t.note}</p>}
-              </div>
-            ))}
-            {!dashboard?.tables.length && <p className="text-sm text-slate-500">Belum ada data meja.</p>}
-          </div>
-        </Card>
+    <main className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex items-center justify-between space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard Admin</h1>
       </div>
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Ringkasan</TabsTrigger>
+          <TabsTrigger value="menu">Menu</TabsTrigger>
+          <TabsTrigger value="tables">Meja</TabsTrigger>
+          <TabsTrigger value="users">Pengguna</TabsTrigger>
+        </TabsList>
+        
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {isLoading ? Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="h-32"/>) : (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pendapatan Hari Ini</CardTitle>
+                    <span className="text-2xl">Rp</span>
+                  </CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{formatIDR(dashboard?.summary.revenueToday ?? 0)}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pesanan Aktif</CardTitle>
+                    <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{dashboard?.summary.openOrders}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Jumlah Menu</CardTitle>
+                    <Utensils className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{dashboard?.summary.menuCount}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Pengguna</CardTitle>
+                    <UserIcon className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent><div className="text-2xl font-bold">{usersData?.users.length ?? 0}</div></CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+          {/* We can add recent orders here */}
+        </TabsContent>
+
+        {/* Menu Tab */}
+        <TabsContent value="menu" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight">Manajemen Menu</h2>
+              <p className="text-muted-foreground">Tambah, ubah, dan kelola semua item menu Anda.</p>
+            </div>
+            <Button><PlusCircle className="mr-2 h-4 w-4"/> Tambah Menu</Button>
+          </div>
+          <Card>
+            {isLoading ? <Skeleton className="h-96 w-full"/> : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nama</TableHead>
+                    <TableHead>Kategori</TableHead>
+                    <TableHead>Harga</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead><span className="sr-only">Aksi</span></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dashboard?.menuItems.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell>{item.category}</TableCell>
+                      <TableCell>{formatIDR(item.price)}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.is_available ? 'default' : 'destructive'}>
+                          {item.is_available ? 'Tersedia' : 'Habis'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4"/></Button></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* Tables Tab */}
+        <TabsContent value="tables" className="space-y-4">
+           <h2 className="text-2xl font-bold tracking-tight">Manajemen Meja</h2>
+           {isLoading ? <Skeleton className="h-64 w-full"/> : (
+             <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+                {dashboard?.tables.map(table => (
+                    <Card key={table.id}>
+                        <CardHeader><CardTitle>{table.label}</CardTitle></CardHeader>
+                        <CardContent className="space-y-2">
+                            <p className="text-sm">Kapasitas: {table.capacity}</p>
+                            <Badge variant={table.status === 'available' ? 'default' : 'secondary'}>{table.status}</Badge>
+                        </CardContent>
+                    </Card>
+                ))}
+             </div>
+           )}
+        </TabsContent>
+
+        {/* Users Tab */}
+        <TabsContent value="users" className="space-y-4">
+          <h2 className="text-2xl font-bold tracking-tight">Manajemen Pengguna</h2>
+            <Card>
+              {isLoading ? <Skeleton className="h-64 w-full"/> : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {usersData?.users.map(user => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.name}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell><Badge variant="outline">{user.role}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </Card>
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
